@@ -187,6 +187,30 @@ io.on('connection', (socket) => {
 	socket.on('get-current-room', (callback) => {
 		callback(Array.from(socket.rooms)[1]);
 	});
+
+	socket.on('play', () => {
+		_log(`Socket.io connection (${socket.id}) requested action play`);
+		const currRoom = getCurrentRoom(socket);
+		if (currRoom) {
+			io.to(currRoom).emit('play');
+		}
+	});
+
+	socket.on('pause', () => {
+		_log(`Socket.io connection (${socket.id}) requested action pause`);
+		const currRoom = getCurrentRoom(socket);
+		if (currRoom) {
+			io.to(currRoom).emit('pause');
+		}
+	});
+
+	socket.on('sync', (time) => {
+		_log(`Socket.io connection (${socket.id}) requested action sync (time: ${time})`);
+		const currRoom = getCurrentRoom(socket);
+		if (currRoom) {
+			io.to(currRoom).emit('sync', time);
+		}
+	});
 });
 
 server.listen(PORT, () => {
