@@ -16,7 +16,8 @@ const io = new socketio.Server(server, {
 	cors: {
 		origin: '*',
 		methods: ['GET', 'POST']
-	}
+	},
+	pingInterval: 1000
 });
 const getUID = new ShortUniqueId({ length: 10 });
 
@@ -47,6 +48,7 @@ const defaultUsernameSuffixes = [
 ];
 
 let users = {};
+let pingIntervals = {};
 
 // ---------------------------------- //
 // --- FUNCTIONS -------------------- //
@@ -65,7 +67,7 @@ function emitUserList(room) {
 	let usernames = [];
 	if (!usersInRoom) return;
 	usersInRoom.forEach((socketId) => {
-		usernames.push(users[socketId].name || 'Anonymous');
+		usernames.push(users[socketId]);
 	});
 	io.to(room).emit('user-list', usernames);
 }
@@ -92,7 +94,10 @@ io.on('connection', (socket) => {
 
 	users[socket.id] = {
 		id: socket.id,
-		name: getRandomUsername()
+		name: getRandomUsername(),
+		ping: 0,
+		currentlyWatching: '',
+		currentTime: 0
 	};
 
 	socket.on('disconnecting', () => {
@@ -106,6 +111,10 @@ io.on('connection', (socket) => {
 	socket.on('disconnect', () => {
 		_log(`Socket.io connection (${socket.id}) disconnected`);
 		delete users[socket.id];
+		if (pingIntervals[socket.id]) {
+			clearInterval(pingIntervals[socket.id]);
+			delete pingIntervals[socket.id];
+		}
 	});
 
 	socket.on('change-username', (name, callback) => {
@@ -211,8 +220,30 @@ io.on('connection', (socket) => {
 			io.to(currRoom).emit('sync', time);
 		}
 	});
+
+	socket.on('currentlyWatching', (movieId, time) => {
+		const currRoom = getCurrentRoom(socket);
+		if (currRoom) {
+			users[socket.id].currentlyWatching = String(movieId);
+			users[socket.id].currentTime = time;
+		}
+	})
+
+	pingIntervals[socket.id] = setInterval(() => {
+		// Only test ping if the user is in a room
+		const currRoom = getCurrentRoom(socket);
+		if (!currRoom) return;
+
+		const start = Date.now();
+		socket.volatile.emit('ping', () => {
+			const end = Date.now();
+			users[socket.id].ping = end - start;
+			emitUserList(currRoom);
+		});
+	}, 500);
 });
 
 server.listen(PORT, () => {
 	_log(`Server running on port ${PORT}`);
 });
+
